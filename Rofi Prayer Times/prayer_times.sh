@@ -1,8 +1,32 @@
 #!/bin/bash
 
 
-#read my custom config and make sure it exits
 
+
+######################## cache to avoid api abuse and hard coded fetch
+COORD_CACHE="$HOME/.cache/prayer_coords"
+
+get_coords() {
+    if [[ -f "$COORD_CACHE" ]]; then
+        read lat lon < "$COORD_CACHE"
+        return
+    fi
+
+    read lat lon < <(
+        curl -s https://ipapi.co/json/ |
+        jq -r '.latitude, .longitude'
+    )
+
+    if ! [[ $lat =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || \
+       ! [[ $lon =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "Invalid coordinates from IP"
+        exit 1
+    fi
+
+    printf "%s %s\n" "$lat" "$lon" > "$COORD_CACHE"
+}
+
+###############read my custom config and make sure it exits
 CONFIG_FILE="$HOME/.prayer_times_config"
 METHOD=3
 
@@ -13,14 +37,35 @@ else
     exit 1
 fi
 
-######################## cache to avoid ip abuse and hard coded fetch
-COORD_CACHE="$HOME/.cache/prayer_coords"
 
-get_coords_from_ip() {
-    [[ -f "$COORD_CACHE" ]] && cat "$COORD_CACHE" && return
-    curl -s https://ipapi.co/json/ | jq -r '.latitude, .longitude' | tee "$COORD_CACHE"
-}
+#actually get coords
+get_coords
 
+######################const coords of Mekkah#################
+Mlon=39.826215
+Mlat=21.422526
+delta_lon=$(("Mlon"-"lon"))
+
+##############################calculating approx. qibla direction
+qibla_deg=$(awk -v lat="$lat" -v lon="$lon" -v Mlat="$Mlat" -v Mlon="$Mlon" '
+BEGIN {
+    pi = atan2(0,-1)
+
+    lat *= pi/180
+    lon *= pi/180
+    Mlat *= pi/180
+    Mlon *= pi/180
+
+    dlon = Mlon - lon
+
+    x = sin(dlon) * cos(Mlat)
+    y = cos(lat)*sin(Mlat) - sin(lat)*cos(Mlat)*cos(dlon)
+
+    deg = atan2(x,y)*180/pi
+    print (deg+360)%360
+}')
+
+##################time helpers##################
 clean_time() {
     echo "$1" | grep -oE '^[0-9]{1,2}:[0-9]{2}'
 }
@@ -61,12 +106,14 @@ fetch_prayer_times() {
         | jq '.data.timings'
 }
 
-#times' menu
+################times' menu
 build_menu() {
     local timings
     timings=$(fetch_prayer_times) || return 1
     local now_sec=$(tosecond "$(date +%H:%M)")
     menu_items=()
+    menu_items+=("Qibla: ${qibla_deg}°")
+    menu_items+=("------------------")
     for prayer in Fajr Dhuhr Asr Maghrib Isha; do
         time=$(jq -r ".$prayer" <<< "$timings")
         sec=$(tosecond "$time")
