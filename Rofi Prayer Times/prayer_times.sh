@@ -8,7 +8,7 @@ COORD_CACHE="$HOME/.cache/prayer_coords"
 
 get_coords() {
     if [[ -f "$COORD_CACHE" ]]; then
-        read lat lon < "$COORD_CACHE"
+        read -r lat lon < <(tr '\n' ' ' < "$COORD_CACHE")
         return
     fi
 
@@ -40,11 +40,15 @@ fi
 
 #actually get coords
 get_coords
+[[ -z "$lat" || -z "$lon" ]] && {
+    echo "Coordinates missing"
+    exit 1
+}
 
 ######################const coords of Mekkah#################
 Mlon=39.826215
 Mlat=21.422526
-delta_lon=$(("Mlon"-"lon"))
+delta_lon=$(awk -v a="$Mlon" -v b="$lon" 'BEGIN{print a-b}')
 
 ##############################calculating approx. qibla direction
 qibla_deg=$(awk -v lat="$lat" -v lon="$lon" -v Mlat="$Mlat" -v Mlon="$Mlon" '
@@ -93,17 +97,23 @@ calculate_countdown() {
 
 #############ip based
 fetch_prayer_times() {
-   readarray -t coords < <(curl -s https://ipapi.co/json/ | jq -r '[.latitude, .longitude] | map(tostring) | .[]')
-	lat=$(echo "${coords[0]}" | tr -d '[:space:]')
-	lon=$(echo "${coords[1]}" | tr -d '[:space:]')
+    local response
+    response=$(curl -sfL \
+        "https://api.aladhan.com/v1/timings?latitude=$lat&longitude=$lon&method=$METHOD"
+    ) || {
+        echo "Failed to fetch prayer times"
+        return 1
+    }
 
-	if ! [[ $lat =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || ! [[ $lon =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-    		echo "Coordinates invalid: lat=$lat lon=$lon"
-    		exit 1
-	fi
+    local code
+    code=$(jq -r '.code' <<< "$response")
 
-    curl -sL "https://api.aladhan.com/v1/timings?latitude=$lat&longitude=$lon&method=$METHOD" \
-        | jq '.data.timings'
+    if [[ "$code" != "200" ]]; then
+        jq -r '.data' <<< "$response" >&2
+        return 1
+    fi
+
+    jq '.data.timings' <<< "$response"
 }
 
 ################times' menu

@@ -1,0 +1,4 @@
+# ~/.prayer_times_config
+
+# Calculation method (see aladhan docs)
+METHOD=3

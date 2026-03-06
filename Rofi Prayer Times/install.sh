@@ -1,18 +1,29 @@
 #!/bin/bash
-
 set -e
 
-INSTALL_DIR="$HOME/.local/share/prayer-times"
+APP_DIR="$HOME/.local/share/prayer-times"
 BIN_DIR="$HOME/.local/bin"
+CONFIG="$HOME/.prayer_times_config"
 
-mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+echo "Installing Prayer Times…"
 
-cp prayer_times.sh "$INSTALL_DIR/"
-cp prayer_times_style.css "$INSTALL_DIR/"
 
-chmod +x "$INSTALL_DIR/prayer_times.sh"
+mkdir -p "$APP_DIR"
+mkdir -p "$BIN_DIR"
 
-ln -sf "$INSTALL_DIR/prayer-times.sh" "$BIN_DIR/prayer-times"
 
-echo "Installed successfully!"
-echo "Bind prayer-times to a keyboard shortcut"
+cp prayer_times.sh "$APP_DIR/"
+cp prayer_times_style.css "$APP_DIR/"
+chmod +x "$APP_DIR/prayer_times.sh"
+
+ln -sf "$APP_DIR/prayer_times.sh" "$BIN_DIR/prayer-times"
+
+
+if [[ ! -f "$CONFIG" ]]; then
+    cp config.example "$CONFIG"
+    echo "Created config at $CONFIG"
+else
+    echo "Config already exists, leaving it untouched"
+fi
+
+echo "Done! Run with: prayer-times"
